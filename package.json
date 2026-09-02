@@ -1,0 +1,19 @@
+{
+  "name": "phone-accessories-inventory-system",
+  "version": "1.0.0",
+  "description": "Phone Accessories Inventory System — HTML/CSS/JS frontend with Google Apps Script + Google Sheets backend",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx serve ."
+  },
+  "keywords": [
+    "inventory",
+    "phone-accessories",
+    "google-apps-script",
+    "google-sheets",
+    "vercel"
+  ],
+  "author": "",
+  "license": "MIT"
+}

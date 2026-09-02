@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phone Accessories Inventory System</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+  <!-- ===================== LOGIN PAGE ===================== -->
+  <div id="loginPage" class="login-wrapper" style="display:none;">
+    <div class="login-card">
+      <div class="login-logo">
+        <i class="fas fa-mobile-alt"></i>
+      </div>
+      <h1 class="login-title">Phone Accessories</h1>
+      <p class="login-subtitle">Inventory System</p>
+      <form id="loginForm" novalidate>
+        <div class="form-group">
+          <label for="loginUsername"><i class="fas fa-user"></i> Username</label>
+          <input type="text" id="loginUsername" placeholder="Enter username" autocomplete="username" required />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword"><i class="fas fa-lock"></i> Password</label>
+          <div class="password-wrapper">
+            <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password" required />
+            <button type="button" class="toggle-password" onclick="togglePassword()">
+              <i class="fas fa-eye" id="pwdEyeIcon"></i>
+            </button>
+          </div>
+        </div>
+        <div id="loginError" class="alert alert-error" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+          <i class="fas fa-sign-in-alt"></i> Login
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <div id="mainApp" class="app-wrapper" style="display:none;">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <i class="fas fa-mobile-alt sidebar-logo-icon"></i>
+        <div class="sidebar-title-wrap">
+          <span class="sidebar-title">PAIS</span>
+          <span class="sidebar-subtitle">Inventory System</span>
+        </div>
+        <button class="sidebar-close" id="sidebarClose" onclick="closeSidebar()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <nav class="sidebar-nav">
+        <ul>
+          <li><a href="#" class="nav-link active" data-module="dashboard">
+            <i class="fas fa-tachometer-alt"></i><span>Dashboard</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="products">
+            <i class="fas fa-box"></i><span>Products</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="stockin">
+            <i class="fas fa-arrow-down"></i><span>Stock In</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="stockout">
+            <i class="fas fa-arrow-up"></i><span>Stock Out</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="suppliers">
+            <i class="fas fa-truck"></i><span>Suppliers</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="inventory">
+            <i class="fas fa-warehouse"></i><span>Inventory Monitoring</span>
+          </a></li>
+          <li id="userMgmtNav" style="display:none;"><a href="#" class="nav-link" data-module="users">
+            <i class="fas fa-users-cog"></i><span>User Management</span>
+          </a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="sidebar-version">v1.0.0</span>
+      </div>
+    </aside>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="mainContent">
+
+      <!-- Top Header -->
+      <header class="top-header">
+        <button class="menu-toggle" id="menuToggle" onclick="openSidebar()">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="header-title" id="headerTitle">Dashboard</div>
+        <div class="header-right">
+          <div class="user-info" id="userInfo">
+            <i class="fas fa-user-circle user-avatar"></i>
+            <div class="user-details">
+              <span class="user-name" id="headerUserName">—</span>
+              <span class="user-role" id="headerUserRole">—</span>
+            </div>
+          </div>
+          <button class="btn btn-logout" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="page-content">
+
+        <!-- ============ DASHBOARD ============ -->
+        <section id="page-dashboard" class="page active">
+          <div class="page-header">
+            <h2>Dashboard</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+          </div>
+          <div class="stats-grid" id="statsGrid">
+            <div class="stat-card blue">
+              <div class="stat-icon"><i class="fas fa-box"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statTotalProducts">—</span>
+                <span class="stat-label">Total Products</span>
+              </div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon"><i class="fas fa-cubes"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statTotalStock">—</span>
+                <span class="stat-label">Total Stock Qty</span>
+              </div>
+            </div>
+            <div class="stat-card orange">
+              <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statLowStock">—</span>
+                <span class="stat-label">Low Stock Items</span>
+              </div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statOutOfStock">—</span>
+                <span class="stat-label">Out of Stock</span>
+              </div>
+            </div>
+            <div class="stat-card purple">
+              <div class="stat-icon"><i class="fas fa-truck"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statTotalSuppliers">—</span>
+                <span class="stat-label">Total Suppliers</span>
+              </div>
+            </div>
+            <div class="stat-card teal">
+              <div class="stat-icon"><i class="fas fa-arrow-circle-down"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statRecentStockIn">—</span>
+                <span class="stat-label">Recent Stock-In</span>
+              </div>
+            </div>
+            <div class="stat-card pink">
+              <div class="stat-icon"><i class="fas fa-arrow-circle-up"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statRecentStockOut">—</span>
+                <span class="stat-label">Recent Stock-Out</span>
+              </div>
+            </div>
+          </div>
+          <div class="dashboard-tables">
+            <div class="dash-table-card">
+              <h3><i class="fas fa-arrow-down"></i> Recent Stock-In</h3>
+              <div class="table-wrap">
+                <table id="dashStockInTable">
+                  <thead><tr><th>Product</th><th>Qty</th><th>Date</th></tr></thead>
+                  <tbody id="dashStockInBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="dash-table-card">
+              <h3><i class="fas fa-arrow-up"></i> Recent Stock-Out</h3>
+              <div class="table-wrap">
+                <table id="dashStockOutTable">
+                  <thead><tr><th>Product</th><th>Qty</th><th>Date</th></tr></thead>
+                  <tbody id="dashStockOutBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="dash-table-card">
+              <h3><i class="fas fa-exclamation-circle"></i> Low / Out of Stock</h3>
+              <div class="table-wrap">
+                <table id="dashAlertTable">
+                  <thead><tr><th>Product</th><th>Stock</th><th>Status</th></tr></thead>
+                  <tbody id="dashAlertBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ PRODUCTS ============ -->
+        <section id="page-products" class="page">
+          <div class="page-header">
+            <h2>Product Management</h2>
+            <button class="btn btn-primary" onclick="openProductModal()">
+              <i class="fas fa-plus"></i> Add Product
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="productSearch" placeholder="Search product name..." oninput="filterProducts()" />
+            <select id="productCatFilter" onchange="filterProducts()">
+              <option value="">All Categories</option>
+              <option>Phone Case</option><option>Charger</option><option>USB Cable</option>
+              <option>Earphones</option><option>Power Bank</option><option>Screen Protector</option>
+              <option>Phone Holder</option><option>Adapter</option><option>Other</option>
+            </select>
+            <select id="productStatusFilter" onchange="filterProducts()">
+              <option value="">All Status</option>
+              <option>Active</option><option>Inactive</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="clearProductFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="productsTable">
+              <thead>
+                <tr>
+                  <th>Product ID</th><th>Name</th><th>Category</th><th>Brand</th>
+                  <th>Variant</th><th>Unit</th><th>Cost</th><th>Price</th>
+                  <th>Qty</th><th>Reorder</th><th>Status</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="productsBody"></tbody>
+            </table>
+          </div>
+          <div id="productsEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-box-open"></i><p>No products found.</p>
+          </div>
+        </section>
+
+        <!-- ============ STOCK IN ============ -->
+        <section id="page-stockin" class="page">
+          <div class="page-header">
+            <h2>Stock In</h2>
+            <button class="btn btn-primary" onclick="openStockInModal()">
+              <i class="fas fa-plus"></i> Add Stock-In
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="stockinSearch" placeholder="Search product..." oninput="filterStockIn()" />
+            <input type="date" id="stockinDateFrom" onchange="filterStockIn()" />
+            <input type="date" id="stockinDateTo" onchange="filterStockIn()" />
+            <button class="btn btn-sm btn-secondary" onclick="clearStockInFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="stockinTable">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Product</th><th>Qty</th><th>Supplier</th>
+                  <th>Ref No</th><th>Date</th><th>Remarks</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="stockinBody"></tbody>
+            </table>
+          </div>
+          <div id="stockinEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-inbox"></i><p>No stock-in records found.</p>
+          </div>
+        </section>
+
+        <!-- ============ STOCK OUT ============ -->
+        <section id="page-stockout" class="page">
+          <div class="page-header">
+            <h2>Stock Out</h2>
+            <button class="btn btn-primary" onclick="openStockOutModal()">
+              <i class="fas fa-plus"></i> Add Stock-Out
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="stockoutSearch" placeholder="Search product..." oninput="filterStockOut()" />
+            <select id="stockoutReasonFilter" onchange="filterStockOut()">
+              <option value="">All Reasons</option>
+              <option>Sold</option><option>Damaged</option><option>Lost</option>
+              <option>Replacement</option><option>Other</option>
+            </select>
+            <input type="date" id="stockoutDateFrom" onchange="filterStockOut()" />
+            <input type="date" id="stockoutDateTo" onchange="filterStockOut()" />
+            <button class="btn btn-sm btn-secondary" onclick="clearStockOutFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="stockoutTable">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Product</th><th>Qty</th><th>Reason</th>
+                  <th>Date</th><th>Remarks</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="stockoutBody"></tbody>
+            </table>
+          </div>
+          <div id="stockoutEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-inbox"></i><p>No stock-out records found.</p>
+          </div>
+        </section>
+
+        <!-- ============ SUPPLIERS ============ -->
+        <section id="page-suppliers" class="page">
+          <div class="page-header">
+            <h2>Supplier Management</h2>
+            <button class="btn btn-primary" onclick="openSupplierModal()">
+              <i class="fas fa-plus"></i> Add Supplier
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="supplierSearch" placeholder="Search supplier..." oninput="filterSuppliers()" />
+            <select id="supplierStatusFilter" onchange="filterSuppliers()">
+              <option value="">All Status</option>
+              <option>Active</option><option>Inactive</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="clearSupplierFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="suppliersTable">
+              <thead>
+                <tr>
+                  <th>Supplier ID</th><th>Name</th><th>Contact</th><th>Phone</th>
+                  <th>Category</th><th>Status</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="suppliersBody"></tbody>
+            </table>
+          </div>
+          <div id="suppliersEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-truck"></i><p>No suppliers found.</p>
+          </div>
+        </section>
+
+        <!-- ============ INVENTORY MONITORING ============ -->
+        <section id="page-inventory" class="page">
+          <div class="page-header">
+            <h2>Inventory Monitoring</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadInventory()">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="inventorySearch" placeholder="Search product..." oninput="filterInventory()" />
+            <select id="inventoryStatusFilter" onchange="filterInventory()">
+              <option value="">All Status</option>
+              <option>In Stock</option><option>Low Stock</option><option>Out of Stock</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="clearInventoryFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="inventoryTable">
+              <thead>
+                <tr>
+                  <th>Product ID</th><th>Product Name</th><th>Category</th>
+                  <th>Total In</th><th>Total Out</th><th>Current Stock</th>
+                  <th>Reorder Level</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryBody"></tbody>
+            </table>
+          </div>
+          <div id="inventoryEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-warehouse"></i><p>No inventory records found.</p>
+          </div>
+        </section>
+
+        <!-- ============ USER MANAGEMENT ============ -->
+        <section id="page-users" class="page">
+          <div class="page-header">
+            <h2>User Management</h2>
+            <button class="btn btn-primary" onclick="openUserModal()">
+              <i class="fas fa-plus"></i> Add User
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="userSearch" placeholder="Search user..." oninput="filterUsers()" />
+            <select id="userRoleFilter" onchange="filterUsers()">
+              <option value="">All Roles</option>
+              <option>Admin</option><option>Staff</option>
+            </select>
+            <select id="userStatusFilter" onchange="filterUsers()">
+              <option value="">All Status</option>
+              <option>Active</option><option>Inactive</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="clearUserFilters()">
+              <i class="fas fa-times"></i> Clear
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table id="usersTable">
+              <thead>
+                <tr>
+                  <th>User ID</th><th>Full Name</th><th>Username</th>
+                  <th>Role</th><th>Status</th><th>Date Created</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+          <div id="usersEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-users"></i><p>No users found.</p>
+          </div>
+        </section>
+
+      </div><!-- end page-content -->
+    </div><!-- end main-content -->
+  </div><!-- end mainApp -->
+
+  <!-- ============================================================ -->
+  <!--                        MODALS                                -->
+  <!-- ============================================================ -->
+
+  <!-- Product Modal -->
+  <div class="modal-overlay" id="productModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="productModalTitle">Add Product</h3>
+        <button class="modal-close" onclick="closeModal('productModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="productForm" novalidate>
+          <input type="hidden" id="pEditMode" value="add" />
+          <input type="hidden" id="pOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Product ID *</label>
+              <input type="text" id="pProductID" placeholder="e.g. PRD-001" required />
+            </div>
+            <div class="form-group">
+              <label>Product Name *</label>
+              <input type="text" id="pProductName" placeholder="Product name" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Category *</label>
+              <select id="pCategory" required>
+                <option value="">Select Category</option>
+                <option>Phone Case</option><option>Charger</option><option>USB Cable</option>
+                <option>Earphones</option><option>Power Bank</option><option>Screen Protector</option>
+                <option>Phone Holder</option><option>Adapter</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Brand</label>
+              <input type="text" id="pBrand" placeholder="Brand name" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Compatible Phone</label>
+              <input type="text" id="pCompatiblePhone" placeholder="e.g. iPhone 15, Samsung S24" />
+            </div>
+            <div class="form-group">
+              <label>Color/Variant</label>
+              <input type="text" id="pVariant" placeholder="e.g. Black, 20000mAh" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Unit *</label>
+              <input type="text" id="pUnit" placeholder="e.g. pcs, set" required />
+            </div>
+            <div class="form-group">
+              <label>Supplier ID</label>
+              <select id="pSupplierID">
+                <option value="">Select Supplier</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cost Price *</label>
+              <input type="number" id="pCostPrice" placeholder="0.00" min="0" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>Selling Price *</label>
+              <input type="number" id="pSellingPrice" placeholder="0.00" min="0" step="0.01" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Initial Quantity *</label>
+              <input type="number" id="pQuantity" placeholder="0" min="0" required />
+            </div>
+            <div class="form-group">
+              <label>Reorder Level *</label>
+              <input type="number" id="pReorderLevel" placeholder="5" min="0" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="pStatus">
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+          <div id="productFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('productModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="productSaveBtn">
+              <i class="fas fa-save"></i> Save Product
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock-In Modal -->
+  <div class="modal-overlay" id="stockinModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="stockinModalTitle">Add Stock-In</h3>
+        <button class="modal-close" onclick="closeModal('stockinModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="stockinForm" novalidate>
+          <input type="hidden" id="siEditMode" value="add" />
+          <input type="hidden" id="siOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Stock-In ID *</label>
+              <input type="text" id="siStockInID" placeholder="e.g. SI-001" required />
+            </div>
+            <div class="form-group">
+              <label>Product *</label>
+              <select id="siProductID" required onchange="onStockInProductChange()">
+                <option value="">Select Product</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Quantity *</label>
+              <input type="number" id="siQuantity" placeholder="0" min="1" required />
+            </div>
+            <div class="form-group">
+              <label>Supplier</label>
+              <select id="siSupplierID">
+                <option value="">Select Supplier</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Reference No</label>
+              <input type="text" id="siReferenceNo" placeholder="Reference number" />
+            </div>
+            <div class="form-group">
+              <label>Date *</label>
+              <input type="date" id="siDate" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <textarea id="siRemarks" rows="2" placeholder="Optional remarks"></textarea>
+          </div>
+          <div id="stockinFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('stockinModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save Stock-In
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock-Out Modal -->
+  <div class="modal-overlay" id="stockoutModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="stockoutModalTitle">Add Stock-Out</h3>
+        <button class="modal-close" onclick="closeModal('stockoutModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="stockoutForm" novalidate>
+          <input type="hidden" id="soEditMode" value="add" />
+          <input type="hidden" id="soOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Stock-Out ID *</label>
+              <input type="text" id="soStockOutID" placeholder="e.g. SO-001" required />
+            </div>
+            <div class="form-group">
+              <label>Product *</label>
+              <select id="soProductID" required onchange="onStockOutProductChange()">
+                <option value="">Select Product</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Quantity *</label>
+              <input type="number" id="soQuantity" placeholder="0" min="1" required />
+            </div>
+            <div class="form-group" id="soAvailableWrap">
+              <label>Available Stock</label>
+              <input type="text" id="soAvailableStock" readonly class="readonly-field" value="—" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Reason *</label>
+              <select id="soReason" required>
+                <option value="">Select Reason</option>
+                <option>Sold</option><option>Damaged</option><option>Lost</option>
+                <option>Replacement</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Date *</label>
+              <input type="date" id="soDate" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <textarea id="soRemarks" rows="2" placeholder="Optional remarks"></textarea>
+          </div>
+          <div id="stockoutFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('stockoutModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save Stock-Out
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Modal -->
+  <div class="modal-overlay" id="supplierModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="supplierModalTitle">Add Supplier</h3>
+        <button class="modal-close" onclick="closeModal('supplierModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="supplierForm" novalidate>
+          <input type="hidden" id="supEditMode" value="add" />
+          <input type="hidden" id="supOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Supplier ID *</label>
+              <input type="text" id="supSupplierID" placeholder="e.g. SUP-001" required />
+            </div>
+            <div class="form-group">
+              <label>Supplier Name *</label>
+              <input type="text" id="supSupplierName" placeholder="Supplier name" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Contact Person</label>
+              <input type="text" id="supContactPerson" placeholder="Contact name" />
+            </div>
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="text" id="supPhone" placeholder="Phone number" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Address</label>
+            <textarea id="supAddress" rows="2" placeholder="Address"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Product Category</label>
+              <select id="supProductCategory">
+                <option value="">Select Category</option>
+                <option>Phone Case</option><option>Charger</option><option>USB Cable</option>
+                <option>Earphones</option><option>Power Bank</option><option>Screen Protector</option>
+                <option>Phone Holder</option><option>Adapter</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="supStatus">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div id="supplierFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('supplierModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save Supplier
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Modal -->
+  <div class="modal-overlay" id="userModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="userModalTitle">Add User</h3>
+        <button class="modal-close" onclick="closeModal('userModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="userForm" novalidate>
+          <input type="hidden" id="uEditMode" value="add" />
+          <input type="hidden" id="uOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>User ID *</label>
+              <input type="text" id="uUserID" placeholder="e.g. USR-001" required />
+            </div>
+            <div class="form-group">
+              <label>Full Name *</label>
+              <input type="text" id="uFullName" placeholder="Full name" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Username *</label>
+              <input type="text" id="uUsername" placeholder="Username" required />
+            </div>
+            <div class="form-group">
+              <label>Password *</label>
+              <input type="password" id="uPassword" placeholder="Password (leave blank to keep current)" />
+              <small id="uPasswordHint" style="color:#888;">Required for new users.</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Role *</label>
+              <select id="uRole" required>
+                <option value="">Select Role</option>
+                <option value="Admin">Admin</option>
+                <option value="Staff">Staff</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="uStatus">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div id="userFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save User
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3><i class="fas fa-exclamation-triangle" style="color:#e74c3c;"></i> Confirm Delete</h3>
+        <button class="modal-close" onclick="closeModal('confirmModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage">Are you sure you want to delete this record?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancel</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p id="loadingText">Loading...</p>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+
