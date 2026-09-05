@@ -141,20 +141,54 @@ function getAuthHeader() {
 
 // ── Session ──────────────────────────────────────────────────
 function saveSession(data) {
-  sessionStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(data));
+  const serialized = JSON.stringify(data);
+
+  try {
+    sessionStorage.setItem(CONFIG.SESSION_KEY, serialized);
+  } catch (e) {
+    console.warn('sessionStorage unavailable:', e);
+  }
+
+  try {
+    localStorage.setItem(CONFIG.SESSION_KEY, serialized);
+  } catch (e) {
+    console.warn('localStorage unavailable:', e);
+  }
 }
 
 function getSession() {
   try {
-    return JSON.parse(sessionStorage.getItem(CONFIG.SESSION_KEY));
-  } catch { return null; }
+    const session = sessionStorage.getItem(CONFIG.SESSION_KEY);
+
+    if (session) {
+      return JSON.parse(session);
+    }
+  } catch (e) {
+    console.warn('sessionStorage read failed:', e);
+  }
+
+  try {
+    const local = localStorage.getItem(CONFIG.SESSION_KEY);
+
+    if (local) {
+      return JSON.parse(local);
+    }
+  } catch (e) {
+    console.warn('localStorage read failed:', e);
+  }
+
+  return null;
 }
 
 function clearSession() {
-  sessionStorage.removeItem(CONFIG.SESSION_KEY);
-}
+  try {
+    sessionStorage.removeItem(CONFIG.SESSION_KEY);
+  } catch (e) {}
 
-// ── Brute Force Protection ────────────────────────────────────
+  try {
+    localStorage.removeItem(CONFIG.SESSION_KEY);
+  } catch (e) {}
+}// ── Brute Force Protection ────────────────────────────────────
 const BRUTE = {
   MAX_ATTEMPTS : 5,          // lock after this many failures
   LOCKOUT_MS   : 15 * 60 * 1000, // 15 minutes in ms
