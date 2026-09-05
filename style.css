@@ -334,6 +334,20 @@ tbody td { padding: .7rem 1rem; font-size: .85rem; color: var(--text); vertical-
 .alert-success { background: var(--success-light); color: #166534; border-left-color: var(--success); }
 .alert-warning { background: var(--warning-light); color: #92400e; border-left-color: var(--warning); }
 
+/* Lockout / brute-force alert */
+.alert-lockout {
+  background: #1e1b4b;
+  color: #e0e7ff;
+  border-left-color: #4f46e5;
+  font-weight: 600;
+  letter-spacing: .01em;
+  animation: lockoutPulse 2s ease-in-out infinite;
+}
+@keyframes lockoutPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .75; }
+}
+
 /* ============================================================
    MODAL
    ============================================================ */
