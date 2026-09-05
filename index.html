@@ -74,13 +74,22 @@
           <li><a href="#" class="nav-link" data-module="inventory">
             <i class="fas fa-warehouse"></i><span>Inventory Monitoring</span>
           </a></li>
+          <li><a href="#" class="nav-link" data-module="pos">
+            <i class="fas fa-cash-register"></i><span>POS / Cashier</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="sales">
+            <i class="fas fa-chart-line"></i><span>Sales Reports</span>
+          </a></li>
+          <li><a href="#" class="nav-link" data-module="returns">
+            <i class="fas fa-undo-alt"></i><span>Returns / Refunds</span>
+          </a></li>
           <li id="userMgmtNav" style="display:none;"><a href="#" class="nav-link" data-module="users">
             <i class="fas fa-users-cog"></i><span>User Management</span>
           </a></li>
         </ul>
       </nav>
       <div class="sidebar-footer">
-        <span class="sidebar-version">v1.0.0</span>
+        <span class="sidebar-version">v2.0.0</span>
       </div>
     </aside>
 
@@ -170,6 +179,13 @@
               <div class="stat-info">
                 <span class="stat-value" id="statRecentStockOut">—</span>
                 <span class="stat-label">Recent Stock-Out</span>
+              </div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon"><i class="fas fa-cash-register"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="statTodaySales">—</span>
+                <span class="stat-label">Today's Sales</span>
               </div>
             </div>
           </div>
@@ -418,6 +434,175 @@
           </div>
           <div id="usersEmpty" class="empty-state" style="display:none;">
             <i class="fas fa-users"></i><p>No users found.</p>
+          </div>
+        </section>
+
+        <!-- ============ POS / CASHIER ============ -->
+        <section id="page-pos" class="page">
+          <div class="page-header">
+            <h2><i class="fas fa-cash-register"></i> POS / Cashier</h2>
+          </div>
+          <div class="pos-layout">
+            <!-- Left: Product Search & Cart -->
+            <div class="pos-left">
+              <div class="pos-search-bar">
+                <i class="fas fa-search pos-search-icon"></i>
+                <input type="text" id="posSearch" placeholder="Search product by name or ID..." oninput="filterPosProducts()" autocomplete="off" />
+              </div>
+              <div class="pos-products-grid" id="posProductsGrid">
+                <div class="pos-empty"><i class="fas fa-box-open"></i><p>Loading products...</p></div>
+              </div>
+            </div>
+            <!-- Right: Cart & Payment -->
+            <div class="pos-right">
+              <div class="pos-cart-header">
+                <h3><i class="fas fa-shopping-cart"></i> Cart</h3>
+                <button class="btn btn-sm btn-secondary" onclick="clearCart()"><i class="fas fa-trash"></i> Clear</button>
+              </div>
+              <div class="pos-cart-items" id="posCartItems">
+                <div class="pos-cart-empty"><i class="fas fa-shopping-cart"></i><p>Cart is empty</p></div>
+              </div>
+              <div class="pos-summary">
+                <div class="pos-summary-row">
+                  <span>Subtotal</span>
+                  <span id="posSubtotal">₱0.00</span>
+                </div>
+                <div class="pos-summary-row discount-row">
+                  <span>Discount</span>
+                  <div class="discount-input-wrap">
+                    <input type="number" id="posDiscount" value="0" min="0" max="100" step="0.01" onchange="updateCartTotals()" />
+                    <span class="discount-pct">%</span>
+                  </div>
+                </div>
+                <div class="pos-summary-row pos-total-row">
+                  <span>TOTAL</span>
+                  <span id="posTotal">₱0.00</span>
+                </div>
+                <div class="pos-cash-section">
+                  <div class="pos-summary-row">
+                    <label for="posCash"><i class="fas fa-money-bill-wave"></i> Cash Tendered</label>
+                    <input type="number" id="posCash" value="0" min="0" step="0.01" onchange="computeChange()" />
+                  </div>
+                  <div class="pos-summary-row pos-change-row">
+                    <span>Change</span>
+                    <span id="posChange" class="pos-change-amount">₱0.00</span>
+                  </div>
+                </div>
+                <div class="pos-customer-row">
+                  <input type="text" id="posCustomerName" placeholder="Customer name (optional)" />
+                  <input type="text" id="posReferenceNo" placeholder="Ref / OR No. (optional)" />
+                </div>
+                <button class="btn btn-success btn-block btn-checkout" id="checkoutBtn" onclick="processCheckout()">
+                  <i class="fas fa-check-circle"></i> Process Sale
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ SALES REPORTS ============ -->
+        <section id="page-sales" class="page">
+          <div class="page-header">
+            <h2><i class="fas fa-chart-line"></i> Sales Reports</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadSales()"><i class="fas fa-sync-alt"></i> Refresh</button>
+          </div>
+          <!-- Summary Cards -->
+          <div class="stats-grid" id="salesStatsGrid">
+            <div class="stat-card green">
+              <div class="stat-icon"><i class="fas fa-peso-sign"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="salesTodayRevenue">—</span>
+                <span class="stat-label">Today's Revenue</span>
+              </div>
+            </div>
+            <div class="stat-card blue">
+              <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="salesTodayCount">—</span>
+                <span class="stat-label">Today's Transactions</span>
+              </div>
+            </div>
+            <div class="stat-card teal">
+              <div class="stat-icon"><i class="fas fa-calendar-week"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="salesMonthRevenue">—</span>
+                <span class="stat-label">This Month Revenue</span>
+              </div>
+            </div>
+            <div class="stat-card purple">
+              <div class="stat-icon"><i class="fas fa-chart-bar"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="salesTotalRevenue">—</span>
+                <span class="stat-label">All-Time Revenue</span>
+              </div>
+            </div>
+          </div>
+          <!-- Filters -->
+          <div class="filter-bar">
+            <input type="date" id="salesDateFrom" onchange="filterSales()" />
+            <input type="date" id="salesDateTo" onchange="filterSales()" />
+            <input type="text" id="salesSearch" placeholder="Search by receipt / customer..." oninput="filterSales()" />
+            <button class="btn btn-sm btn-secondary" onclick="clearSalesFilters()"><i class="fas fa-times"></i> Clear</button>
+          </div>
+          <!-- Sales Table -->
+          <div class="table-wrap">
+            <table id="salesTable">
+              <thead>
+                <tr>
+                  <th>Receipt No</th><th>Date</th><th>Customer</th>
+                  <th>Items</th><th>Subtotal</th><th>Discount</th><th>Total</th>
+                  <th>Cash</th><th>Change</th><th>Cashier</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="salesBody"></tbody>
+            </table>
+          </div>
+          <div id="salesEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-chart-line"></i><p>No sales records found.</p>
+          </div>
+          <!-- Best Sellers -->
+          <div class="sales-section-title"><i class="fas fa-trophy"></i> Top 10 Best Sellers</div>
+          <div class="table-wrap">
+            <table id="bestSellersTable">
+              <thead>
+                <tr><th>Rank</th><th>Product</th><th>Category</th><th>Qty Sold</th><th>Revenue</th></tr>
+              </thead>
+              <tbody id="bestSellersBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ RETURNS / REFUNDS ============ -->
+        <section id="page-returns" class="page">
+          <div class="page-header">
+            <h2><i class="fas fa-undo-alt"></i> Returns / Refunds</h2>
+            <button class="btn btn-primary" onclick="openReturnModal()">
+              <i class="fas fa-plus"></i> New Return
+            </button>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="returnSearch" placeholder="Search by return ID / product..." oninput="filterReturns()" />
+            <select id="returnTypeFilter" onchange="filterReturns()">
+              <option value="">All Types</option>
+              <option>Restock</option><option>Damaged</option>
+            </select>
+            <input type="date" id="returnDateFrom" onchange="filterReturns()" />
+            <input type="date" id="returnDateTo" onchange="filterReturns()" />
+            <button class="btn btn-sm btn-secondary" onclick="clearReturnFilters()"><i class="fas fa-times"></i> Clear</button>
+          </div>
+          <div class="table-wrap">
+            <table id="returnsTable">
+              <thead>
+                <tr>
+                  <th>Return ID</th><th>Receipt No</th><th>Product</th><th>Qty</th>
+                  <th>Refund Amt</th><th>Type</th><th>Reason</th><th>Date</th><th>Processed By</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="returnsBody"></tbody>
+            </table>
+          </div>
+          <div id="returnsEmpty" class="empty-state" style="display:none;">
+            <i class="fas fa-undo-alt"></i><p>No return records found.</p>
           </div>
         </section>
 
@@ -791,6 +976,116 @@
         <button class="btn btn-danger" id="confirmDeleteBtn">
           <i class="fas fa-trash"></i> Delete
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt Modal -->
+  <div class="modal-overlay" id="receiptModal">
+    <div class="modal modal-receipt">
+      <div class="modal-header">
+        <h3><i class="fas fa-receipt"></i> Official Receipt</h3>
+        <button class="modal-close" onclick="closeModal('receiptModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="receiptContent">
+        <!-- filled by JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('receiptModal')">Close</button>
+        <button class="btn btn-primary" onclick="printReceipt()"><i class="fas fa-print"></i> Print</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sale Detail Modal -->
+  <div class="modal-overlay" id="saleDetailModal">
+    <div class="modal modal-receipt">
+      <div class="modal-header">
+        <h3><i class="fas fa-receipt"></i> Sale Details</h3>
+        <button class="modal-close" onclick="closeModal('saleDetailModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="saleDetailContent"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('saleDetailModal')">Close</button>
+        <button class="btn btn-primary" onclick="printSaleDetail()"><i class="fas fa-print"></i> Print</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Return Modal -->
+  <div class="modal-overlay" id="returnModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="returnModalTitle"><i class="fas fa-undo-alt"></i> New Return / Refund</h3>
+        <button class="modal-close" onclick="closeModal('returnModal')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="returnForm" novalidate>
+          <input type="hidden" id="retEditMode" value="add" />
+          <input type="hidden" id="retOriginalID" value="" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Return ID *</label>
+              <input type="text" id="retReturnID" placeholder="e.g. RET-001" required />
+            </div>
+            <div class="form-group">
+              <label>Receipt No (optional)</label>
+              <input type="text" id="retReceiptNo" placeholder="Original receipt no." />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Product *</label>
+              <select id="retProductID" required onchange="onReturnProductChange()">
+                <option value="">Select Product</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity *</label>
+              <input type="number" id="retQuantity" placeholder="0" min="1" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Refund Amount *</label>
+              <input type="number" id="retRefundAmount" placeholder="0.00" min="0" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>Return Type *</label>
+              <select id="retType" required>
+                <option value="">Select Type</option>
+                <option value="Restock">Restock (item is OK, return to inventory)</option>
+                <option value="Damaged">Damaged (do not restock)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Reason *</label>
+              <select id="retReason" required>
+                <option value="">Select Reason</option>
+                <option>Wrong item</option>
+                <option>Defective / Not working</option>
+                <option>Customer changed mind</option>
+                <option>Damaged on delivery</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Date *</label>
+              <input type="date" id="retDate" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <textarea id="retRemarks" rows="2" placeholder="Optional remarks"></textarea>
+          </div>
+          <div id="returnFormError" class="alert alert-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('returnModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Return</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
