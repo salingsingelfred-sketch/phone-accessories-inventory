@@ -13,6 +13,10 @@ const STATE = {
   suppliers: [],
   inventory: [],
   users: [],
+  sales: [],
+  returns: [],
+  posCart: [],
+  posAllProducts: [],
 };
 
 // ── Utilities ────────────────────────────────────────────────
@@ -417,6 +421,9 @@ function navigateTo(module) {
     suppliers: 'Supplier Management',
     inventory: 'Inventory Monitoring',
     users: 'User Management',
+    pos: 'POS / Cashier',
+    sales: 'Sales Reports',
+    returns: 'Returns / Refunds',
   };
   $('headerTitle').textContent = titles[module] || module;
 
@@ -428,6 +435,9 @@ function navigateTo(module) {
     case 'suppliers': loadSuppliers(); break;
     case 'inventory': loadInventory(); break;
     case 'users': loadUsers(); break;
+    case 'pos': loadPOS(); break;
+    case 'sales': loadSales(); break;
+    case 'returns': loadReturns(); break;
   }
 }
 
@@ -448,22 +458,30 @@ async function loadDashboard() {
   showLoading('Loading dashboard...');
   try {
     const sess = getSession();
-    const res = await apiCall({ action: 'getDashboard', token: sess.token });
+    const [res, salesRes] = await Promise.all([
+      apiCall({ action: 'getDashboard', token: sess.token }),
+      apiCall({ action: 'getSales',     token: sess.token }),
+    ]);
     if (res.success) {
       const d = res.data;
       $('statTotalProducts').textContent = d.totalProducts ?? '0';
-      $('statTotalStock').textContent = d.totalStock ?? '0';
-      $('statLowStock').textContent = d.lowStock ?? '0';
-      $('statOutOfStock').textContent = d.outOfStock ?? '0';
-      $('statTotalSuppliers').textContent = d.totalSuppliers ?? '0';
-      $('statRecentStockIn').textContent = d.recentStockInCount ?? '0';
+      $('statTotalStock').textContent    = d.totalStock    ?? '0';
+      $('statLowStock').textContent      = d.lowStock      ?? '0';
+      $('statOutOfStock').textContent    = d.outOfStock    ?? '0';
+      $('statTotalSuppliers').textContent = d.totalSuppliers    ?? '0';
+      $('statRecentStockIn').textContent  = d.recentStockInCount  ?? '0';
       $('statRecentStockOut').textContent = d.recentStockOutCount ?? '0';
 
-      renderDashStockIn(d.recentStockIn || []);
+      renderDashStockIn(d.recentStockIn   || []);
       renderDashStockOut(d.recentStockOut || []);
-      renderDashAlerts(d.alerts || []);
+      renderDashAlerts(d.alerts           || []);
     } else {
       showToast(res.message || 'Failed to load dashboard.', 'error');
+    }
+    if (salesRes.success) {
+      $('statTodaySales').textContent = formatCurrency(salesRes.data.todayRevenue || 0);
+    } else {
+      $('statTodaySales').textContent = '₱0.00';
     }
   } catch (err) {
     showToast(err.message, 'error');
@@ -1538,6 +1556,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // User form
   $('userForm').addEventListener('submit', handleUserSubmit);
 
+  // Return form
+  $('returnForm').addEventListener('submit', handleReturnSubmit);
+
   // Close modals on overlay click
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
@@ -1552,3 +1573,629 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  POS / CASHIER
+// ═══════════════════════════════════════════════════════════════
+async function loadPOS() {
+  showLoading('Loading POS...');
+  try {
+    const sess = getSession();
+    if (!STATE.products.length || !STATE.posAllProducts.length) {
+      const res = await apiCall({ action: 'getProducts', token: sess.token });
+      if (res.success) {
+        STATE.products = res.data || [];
+        STATE.posAllProducts = STATE.products.filter(p => p.status === 'Active');
+      }
+    } else {
+      STATE.posAllProducts = STATE.products.filter(p => p.status === 'Active');
+    }
+    renderPosProducts(STATE.posAllProducts);
+    renderCart();
+  } catch (err) { showToast(err.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+function renderPosProducts(list) {
+  const grid = $('posProductsGrid');
+  if (!list.length) {
+    grid.innerHTML = '<div class="pos-empty"><i class="fas fa-box-open"></i><p>No products found.</p></div>';
+    return;
+  }
+  grid.innerHTML = list.map(p => {
+    const outOfStock = parseInt(p.quantity) <= 0;
+    return `
+    <div class="pos-product-card ${outOfStock ? 'pos-out-of-stock' : ''}" onclick="${outOfStock ? '' : `addToCart('${escapeHtml(p.productID)}')`}">
+      <div class="pos-product-icon"><i class="fas fa-mobile-alt"></i></div>
+      <div class="pos-product-name">${escapeHtml(p.productName)}</div>
+      <div class="pos-product-price">${formatCurrency(p.sellingPrice)}</div>
+      <div class="pos-product-stock ${outOfStock ? 'out' : parseInt(p.quantity) <= (p.reorderLevel || 5) ? 'low' : ''}">
+        Stock: ${escapeHtml(String(p.quantity))}
+      </div>
+      ${outOfStock ? '<div class="pos-oos-label">OUT OF STOCK</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function filterPosProducts() {
+  const q = $('posSearch').value.toLowerCase().trim();
+  if (!q) { renderPosProducts(STATE.posAllProducts); return; }
+  const filtered = STATE.posAllProducts.filter(p =>
+    (p.productName || '').toLowerCase().includes(q) ||
+    (p.productID || '').toLowerCase().includes(q) ||
+    (p.brand || '').toLowerCase().includes(q)
+  );
+  renderPosProducts(filtered);
+}
+
+function addToCart(productID) {
+  const prod = STATE.posAllProducts.find(p => p.productID === productID);
+  if (!prod) return;
+  const existing = STATE.posCart.find(c => c.productID === productID);
+  if (existing) {
+    if (existing.qty >= parseInt(prod.quantity)) {
+      showToast('Cannot exceed available stock.', 'warning');
+      return;
+    }
+    existing.qty++;
+  } else {
+    STATE.posCart.push({
+      productID: prod.productID,
+      productName: prod.productName,
+      price: parseFloat(prod.sellingPrice) || 0,
+      qty: 1,
+      maxQty: parseInt(prod.quantity),
+    });
+  }
+  renderCart();
+  updateCartTotals();
+  showToast(`${prod.productName} added to cart.`, 'success', 1200);
+}
+
+function removeFromCart(productID) {
+  STATE.posCart = STATE.posCart.filter(c => c.productID !== productID);
+  renderCart();
+  updateCartTotals();
+}
+
+function changeCartQty(productID, delta) {
+  const item = STATE.posCart.find(c => c.productID === productID);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) { removeFromCart(productID); return; }
+  if (item.qty > item.maxQty) {
+    item.qty = item.maxQty;
+    showToast('Cannot exceed available stock.', 'warning');
+  }
+  renderCart();
+  updateCartTotals();
+}
+
+function clearCart() {
+  STATE.posCart = [];
+  $('posDiscount').value = 0;
+  $('posCash').value = 0;
+  $('posCustomerName').value = '';
+  $('posReferenceNo').value = '';
+  renderCart();
+  updateCartTotals();
+}
+
+function renderCart() {
+  const container = $('posCartItems');
+  if (!STATE.posCart.length) {
+    container.innerHTML = '<div class="pos-cart-empty"><i class="fas fa-shopping-cart"></i><p>Cart is empty</p></div>';
+    return;
+  }
+  container.innerHTML = STATE.posCart.map(item => `
+    <div class="pos-cart-item">
+      <div class="pos-cart-item-info">
+        <span class="pos-cart-item-name">${escapeHtml(item.productName)}</span>
+        <span class="pos-cart-item-price">${formatCurrency(item.price)} each</span>
+      </div>
+      <div class="pos-cart-item-controls">
+        <button class="pos-qty-btn" onclick="changeCartQty('${escapeHtml(item.productID)}', -1)"><i class="fas fa-minus"></i></button>
+        <span class="pos-cart-qty">${item.qty}</span>
+        <button class="pos-qty-btn" onclick="changeCartQty('${escapeHtml(item.productID)}', 1)"><i class="fas fa-plus"></i></button>
+        <span class="pos-cart-line-total">${formatCurrency(item.price * item.qty)}</span>
+        <button class="pos-remove-btn" onclick="removeFromCart('${escapeHtml(item.productID)}')"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateCartTotals() {
+  const subtotal = STATE.posCart.reduce((s, c) => s + c.price * c.qty, 0);
+  const discountPct = Math.min(Math.max(parseFloat($('posDiscount').value) || 0, 0), 100);
+  const discountAmt = subtotal * (discountPct / 100);
+  const total = subtotal - discountAmt;
+
+  $('posSubtotal').textContent = formatCurrency(subtotal);
+  $('posTotal').textContent = formatCurrency(total);
+  computeChange();
+}
+
+function computeChange() {
+  const total = parseFloat($('posTotal').textContent.replace('₱', '').replace(/,/g, '')) || 0;
+  const cash = parseFloat($('posCash').value) || 0;
+  const change = cash - total;
+  const el = $('posChange');
+  el.textContent = formatCurrency(Math.max(change, 0));
+  el.style.color = change < 0 ? '#e74c3c' : '#16a34a';
+}
+
+async function processCheckout() {
+  if (!STATE.posCart.length) {
+    showToast('Cart is empty.', 'warning');
+    return;
+  }
+
+  const subtotal = STATE.posCart.reduce((s, c) => s + c.price * c.qty, 0);
+  const discountPct = Math.min(Math.max(parseFloat($('posDiscount').value) || 0, 0), 100);
+  const discountAmt = subtotal * (discountPct / 100);
+  const total = subtotal - discountAmt;
+  const cash = parseFloat($('posCash').value) || 0;
+
+  if (cash < total) {
+    showToast('Cash tendered is less than the total amount.', 'error');
+    return;
+  }
+
+  const btn = $('checkoutBtn');
+  btn.disabled = true;
+  showLoading('Processing sale...');
+
+  try {
+    const sess = getSession();
+    const payload = {
+      action: 'processSale',
+      token: sess.token,
+      items: STATE.posCart.map(c => ({
+        productID: c.productID,
+        productName: c.productName,
+        qty: c.qty,
+        unitPrice: c.price,
+        lineTotal: c.price * c.qty,
+      })),
+      subtotal,
+      discountPct,
+      discountAmt,
+      total,
+      cash,
+      change: cash - total,
+      customerName: $('posCustomerName').value.trim(),
+      referenceNo: $('posReferenceNo').value.trim(),
+    };
+
+    const res = await apiPost(payload);
+    if (res.success) {
+      const saleData = res.data;
+      // Reload products to reflect updated stock
+      const pRes = await apiCall({ action: 'getProducts', token: sess.token });
+      if (pRes.success) {
+        STATE.products = pRes.data || [];
+        STATE.posAllProducts = STATE.products.filter(p => p.status === 'Active');
+      }
+      filterPosProducts();
+      showReceiptModal(saleData);
+      clearCart();
+      showToast('Sale processed successfully!', 'success');
+    } else {
+      showToast(res.message || 'Failed to process sale.', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    hideLoading();
+    btn.disabled = false;
+  }
+}
+
+function showReceiptModal(sale) {
+  const itemRows = (sale.items || []).map(it => `
+    <tr>
+      <td>${escapeHtml(it.productName)}</td>
+      <td style="text-align:center;">${it.qty}</td>
+      <td style="text-align:right;">${formatCurrency(it.unitPrice)}</td>
+      <td style="text-align:right;"><strong>${formatCurrency(it.lineTotal)}</strong></td>
+    </tr>
+  `).join('');
+
+  $('receiptContent').innerHTML = `
+    <div class="receipt-wrap">
+      <div class="receipt-header">
+        <div class="receipt-logo"><i class="fas fa-mobile-alt"></i></div>
+        <h2>Phone Accessories</h2>
+        <p>Official Receipt</p>
+        <p class="receipt-no"><strong>Receipt #: ${escapeHtml(sale.receiptNo)}</strong></p>
+        <p>${escapeHtml(sale.date || '')}</p>
+        ${sale.customerName ? `<p>Customer: ${escapeHtml(sale.customerName)}</p>` : ''}
+      </div>
+      <table class="receipt-items">
+        <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <div class="receipt-totals">
+        <div class="receipt-row"><span>Subtotal</span><span>${formatCurrency(sale.subtotal)}</span></div>
+        ${sale.discountPct > 0 ? `<div class="receipt-row"><span>Discount (${sale.discountPct}%)</span><span>-${formatCurrency(sale.discountAmt)}</span></div>` : ''}
+        <div class="receipt-row receipt-row-total"><span>TOTAL</span><span>${formatCurrency(sale.total)}</span></div>
+        <div class="receipt-row"><span>Cash</span><span>${formatCurrency(sale.cash)}</span></div>
+        <div class="receipt-row"><span>Change</span><span>${formatCurrency(sale.change)}</span></div>
+      </div>
+      <div class="receipt-footer">
+        <p>Cashier: ${escapeHtml(sale.cashierName || sale.cashier || '—')}</p>
+        <p>Thank you for your purchase!</p>
+      </div>
+    </div>
+  `;
+  openModal('receiptModal');
+}
+
+function printReceipt() {
+  const content = $('receiptContent').innerHTML;
+  const win = window.open('', '_blank', 'width=400,height=600');
+  win.document.write(`
+    <html><head><title>Receipt</title>
+    <style>
+      body { font-family: monospace; font-size: 13px; margin: 0; padding: 16px; }
+      .receipt-wrap { max-width: 320px; margin: 0 auto; }
+      .receipt-header { text-align: center; border-bottom: 1px dashed #333; padding-bottom: 8px; margin-bottom: 8px; }
+      .receipt-header h2 { margin: 0; font-size: 18px; }
+      .receipt-header p { margin: 2px 0; }
+      .receipt-items { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+      .receipt-items th, .receipt-items td { padding: 3px 4px; font-size: 12px; }
+      .receipt-items thead { border-bottom: 1px solid #333; }
+      .receipt-totals { border-top: 1px dashed #333; padding-top: 8px; }
+      .receipt-row { display: flex; justify-content: space-between; margin: 2px 0; }
+      .receipt-row-total { font-weight: bold; font-size: 15px; border-top: 1px solid #333; padding-top: 4px; margin-top: 4px; }
+      .receipt-footer { text-align: center; border-top: 1px dashed #333; margin-top: 8px; padding-top: 8px; font-size: 11px; }
+    </style></head><body>${content}</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 300);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SALES REPORTS
+// ═══════════════════════════════════════════════════════════════
+async function loadSales() {
+  showLoading('Loading sales...');
+  try {
+    const sess = getSession();
+    const res = await apiCall({ action: 'getSales', token: sess.token });
+    if (res.success) {
+      STATE.sales = res.data.sales || [];
+      renderSalesSummary(res.data);
+      renderSales(STATE.sales);
+      renderBestSellers(res.data.bestSellers || []);
+    } else { showToast(res.message || 'Failed to load sales.', 'error'); }
+  } catch (err) { showToast(err.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+function renderSalesSummary(data) {
+  $('salesTodayRevenue').textContent  = formatCurrency(data.todayRevenue   || 0);
+  $('salesTodayCount').textContent    = data.todayCount    ?? '0';
+  $('salesMonthRevenue').textContent  = formatCurrency(data.monthRevenue   || 0);
+  $('salesTotalRevenue').textContent  = formatCurrency(data.totalRevenue   || 0);
+}
+
+function renderSales(list) {
+  const tbody = $('salesBody');
+  const empty = $('salesEmpty');
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = list.map(s => `
+    <tr>
+      <td><strong>${escapeHtml(s.receiptNo)}</strong></td>
+      <td>${formatDate(s.date)}</td>
+      <td>${escapeHtml(s.customerName || '—')}</td>
+      <td style="text-align:center;">${escapeHtml(String(s.itemCount || 0))}</td>
+      <td>${formatCurrency(s.subtotal)}</td>
+      <td>${s.discountPct > 0 ? escapeHtml(String(s.discountPct)) + '%' : '—'}</td>
+      <td><strong>${formatCurrency(s.total)}</strong></td>
+      <td>${formatCurrency(s.cash)}</td>
+      <td>${formatCurrency(s.change)}</td>
+      <td>${escapeHtml(s.cashierName || s.cashier || '—')}</td>
+      <td class="actions-cell">
+        <button class="btn btn-sm btn-primary btn-icon" title="View" onclick="viewSaleDetail('${escapeHtml(s.receiptNo)}')">
+          <i class="fas fa-eye"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function filterSales() {
+  const from   = $('salesDateFrom').value;
+  const to     = $('salesDateTo').value;
+  const search = $('salesSearch').value.toLowerCase();
+  const filtered = STATE.sales.filter(s => {
+    const d = s.date ? new Date(s.date) : null;
+    const matchFrom   = !from || (d && d >= new Date(from));
+    const matchTo     = !to   || (d && d <= new Date(to + 'T23:59:59'));
+    const matchSearch = !search ||
+      (s.receiptNo    || '').toLowerCase().includes(search) ||
+      (s.customerName || '').toLowerCase().includes(search);
+    return matchFrom && matchTo && matchSearch;
+  });
+  renderSales(filtered);
+}
+
+function clearSalesFilters() {
+  $('salesDateFrom').value = '';
+  $('salesDateTo').value   = '';
+  $('salesSearch').value   = '';
+  renderSales(STATE.sales);
+}
+
+function renderBestSellers(list) {
+  const tbody = $('bestSellersBody');
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">No data yet.</td></tr>'; return; }
+  tbody.innerHTML = list.map((item, i) => `
+    <tr>
+      <td><strong>#${i + 1}</strong></td>
+      <td>${escapeHtml(item.productName)}</td>
+      <td>${escapeHtml(item.category || '—')}</td>
+      <td><strong>${escapeHtml(String(item.qtySold))}</strong></td>
+      <td>${formatCurrency(item.revenue)}</td>
+    </tr>`).join('');
+}
+
+async function viewSaleDetail(receiptNo) {
+  showLoading('Loading sale details...');
+  try {
+    const sess = getSession();
+    const res = await apiCall({ action: 'getSaleDetail', token: sess.token, receiptNo });
+    if (res.success) {
+      const sale = res.data;
+      const itemRows = (sale.items || []).map(it => `
+        <tr>
+          <td>${escapeHtml(it.productName)}</td>
+          <td style="text-align:center;">${it.qty}</td>
+          <td style="text-align:right;">${formatCurrency(it.unitPrice)}</td>
+          <td style="text-align:right;"><strong>${formatCurrency(it.lineTotal)}</strong></td>
+        </tr>`).join('');
+
+      $('saleDetailContent').innerHTML = `
+        <div class="receipt-wrap">
+          <div class="receipt-header">
+            <div class="receipt-logo"><i class="fas fa-mobile-alt"></i></div>
+            <h2>Phone Accessories</h2>
+            <p>Official Receipt</p>
+            <p class="receipt-no"><strong>Receipt #: ${escapeHtml(sale.receiptNo)}</strong></p>
+            <p>${escapeHtml(sale.date || '')}</p>
+            ${sale.customerName ? `<p>Customer: ${escapeHtml(sale.customerName)}</p>` : ''}
+          </div>
+          <table class="receipt-items">
+            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          <div class="receipt-totals">
+            <div class="receipt-row"><span>Subtotal</span><span>${formatCurrency(sale.subtotal)}</span></div>
+            ${sale.discountPct > 0 ? `<div class="receipt-row"><span>Discount (${sale.discountPct}%)</span><span>-${formatCurrency(sale.discountAmt)}</span></div>` : ''}
+            <div class="receipt-row receipt-row-total"><span>TOTAL</span><span>${formatCurrency(sale.total)}</span></div>
+            <div class="receipt-row"><span>Cash</span><span>${formatCurrency(sale.cash)}</span></div>
+            <div class="receipt-row"><span>Change</span><span>${formatCurrency(sale.change)}</span></div>
+          </div>
+          <div class="receipt-footer">
+            <p>Cashier: ${escapeHtml(sale.cashierName || sale.cashier || '—')}</p>
+            <p>Thank you for your purchase!</p>
+          </div>
+        </div>`;
+      openModal('saleDetailModal');
+    } else { showToast(res.message || 'Failed to load sale details.', 'error'); }
+  } catch (err) { showToast(err.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+function printSaleDetail() {
+  const content = $('saleDetailContent').innerHTML;
+  const win = window.open('', '_blank', 'width=400,height=600');
+  win.document.write(`
+    <html><head><title>Receipt</title>
+    <style>
+      body { font-family: monospace; font-size: 13px; margin: 0; padding: 16px; }
+      .receipt-wrap { max-width: 320px; margin: 0 auto; }
+      .receipt-header { text-align: center; border-bottom: 1px dashed #333; padding-bottom: 8px; margin-bottom: 8px; }
+      .receipt-header h2 { margin: 0; font-size: 18px; }
+      .receipt-header p { margin: 2px 0; }
+      .receipt-items { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+      .receipt-items th, .receipt-items td { padding: 3px 4px; font-size: 12px; }
+      .receipt-items thead { border-bottom: 1px solid #333; }
+      .receipt-totals { border-top: 1px dashed #333; padding-top: 8px; }
+      .receipt-row { display: flex; justify-content: space-between; margin: 2px 0; }
+      .receipt-row-total { font-weight: bold; font-size: 15px; border-top: 1px solid #333; padding-top: 4px; margin-top: 4px; }
+      .receipt-footer { text-align: center; border-top: 1px dashed #333; margin-top: 8px; padding-top: 8px; font-size: 11px; }
+    </style></head><body>${content}</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 300);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RETURNS / REFUNDS
+// ═══════════════════════════════════════════════════════════════
+async function loadReturns() {
+  showLoading('Loading returns...');
+  try {
+    const sess = getSession();
+    if (!STATE.products.length) {
+      const pRes = await apiCall({ action: 'getProducts', token: sess.token });
+      if (pRes.success) STATE.products = pRes.data || [];
+    }
+    const res = await apiCall({ action: 'getReturns', token: sess.token });
+    if (res.success) {
+      STATE.returns = res.data || [];
+      renderReturns(STATE.returns);
+    } else { showToast(res.message || 'Failed to load returns.', 'error'); }
+  } catch (err) { showToast(err.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+function renderReturns(list) {
+  const tbody = $('returnsBody');
+  const empty = $('returnsEmpty');
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = list.map(r => `
+    <tr>
+      <td>${escapeHtml(r.returnID)}</td>
+      <td>${escapeHtml(r.receiptNo || '—')}</td>
+      <td>${escapeHtml(r.productName)}</td>
+      <td style="text-align:center;"><strong>${escapeHtml(String(r.quantity))}</strong></td>
+      <td>${formatCurrency(r.refundAmount)}</td>
+      <td>${returnTypeBadge(r.returnType)}</td>
+      <td>${escapeHtml(r.reason)}</td>
+      <td>${formatDate(r.date)}</td>
+      <td>${escapeHtml(r.processedBy || '—')}</td>
+      <td class="actions-cell">
+        <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="deleteReturn('${escapeHtml(r.returnID)}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function returnTypeBadge(type) {
+  if (type === 'Restock') return '<span class="badge badge-success">Restock</span>';
+  if (type === 'Damaged') return '<span class="badge badge-danger">Damaged</span>';
+  return `<span class="badge badge-secondary">${escapeHtml(type || '—')}</span>`;
+}
+
+function filterReturns() {
+  const search = $('returnSearch').value.toLowerCase();
+  const type   = $('returnTypeFilter').value;
+  const from   = $('returnDateFrom').value;
+  const to     = $('returnDateTo').value;
+  const filtered = STATE.returns.filter(r => {
+    const matchSearch = !search ||
+      (r.returnID     || '').toLowerCase().includes(search) ||
+      (r.productName  || '').toLowerCase().includes(search) ||
+      (r.receiptNo    || '').toLowerCase().includes(search);
+    const matchType = !type || r.returnType === type;
+    const d = r.date ? new Date(r.date) : null;
+    const matchFrom = !from || (d && d >= new Date(from));
+    const matchTo   = !to   || (d && d <= new Date(to + 'T23:59:59'));
+    return matchSearch && matchType && matchFrom && matchTo;
+  });
+  renderReturns(filtered);
+}
+
+function clearReturnFilters() {
+  $('returnSearch').value      = '';
+  $('returnTypeFilter').value  = '';
+  $('returnDateFrom').value    = '';
+  $('returnDateTo').value      = '';
+  renderReturns(STATE.returns);
+}
+
+function openReturnModal(data = null) {
+  $('returnFormError').style.display = 'none';
+  $('returnForm').reset();
+  populateProductSelect('retProductID');
+  $('retDate').value = todayISO();
+
+  if (data) {
+    $('returnModalTitle').innerHTML = '<i class="fas fa-undo-alt"></i> Edit Return';
+    $('retEditMode').value     = 'edit';
+    $('retOriginalID').value   = data.returnID;
+    $('retReturnID').value     = data.returnID;
+    $('retReturnID').readOnly  = true;
+    $('retReceiptNo').value    = data.receiptNo || '';
+    $('retProductID').value    = data.productID || '';
+    $('retQuantity').value     = data.quantity  || '';
+    $('retRefundAmount').value = data.refundAmount || '';
+    $('retType').value         = data.returnType   || '';
+    $('retReason').value       = data.reason       || '';
+    $('retDate').value         = data.date         || todayISO();
+    $('retRemarks').value      = data.remarks      || '';
+  } else {
+    $('returnModalTitle').innerHTML = '<i class="fas fa-undo-alt"></i> New Return / Refund';
+    $('retEditMode').value    = 'add';
+    $('retOriginalID').value  = '';
+    $('retReturnID').readOnly = false;
+  }
+  openModal('returnModal');
+}
+
+function onReturnProductChange() {
+  const pid  = $('retProductID').value;
+  const prod = STATE.products.find(p => p.productID === pid);
+  if (prod) $('retRefundAmount').value = parseFloat(prod.sellingPrice).toFixed(2);
+}
+
+async function handleReturnSubmit(e) {
+  e.preventDefault();
+  const errEl = $('returnFormError');
+  errEl.style.display = 'none';
+
+  const mode = $('retEditMode').value;
+  const qty  = parseInt($('retQuantity').value);
+  const data = {
+    action: mode === 'edit' ? 'updateReturn' : 'addReturn',
+    token: getSession().token,
+    originalID:    $('retOriginalID').value,
+    returnID:      $('retReturnID').value.trim(),
+    receiptNo:     $('retReceiptNo').value.trim(),
+    productID:     $('retProductID').value,
+    quantity:      qty,
+    refundAmount:  parseFloat($('retRefundAmount').value) || 0,
+    returnType:    $('retType').value,
+    reason:        $('retReason').value,
+    date:          $('retDate').value,
+    remarks:       $('retRemarks').value.trim(),
+  };
+
+  if (!data.returnID)    { errEl.textContent = 'Return ID is required.';     errEl.style.display = 'block'; return; }
+  if (!data.productID)   { errEl.textContent = 'Product is required.';       errEl.style.display = 'block'; return; }
+  if (!qty || qty < 1)   { errEl.textContent = 'Quantity must be at least 1.'; errEl.style.display = 'block'; return; }
+  if (!data.returnType)  { errEl.textContent = 'Return type is required.';   errEl.style.display = 'block'; return; }
+  if (!data.reason)      { errEl.textContent = 'Reason is required.';        errEl.style.display = 'block'; return; }
+  if (!data.date)        { errEl.textContent = 'Date is required.';          errEl.style.display = 'block'; return; }
+
+  const btn = e.target.querySelector('[type="submit"]');
+  setButtonLoading(btn, true);
+  try {
+    const res = await apiPost(data);
+    if (res.success) {
+      showToast(res.message || 'Return saved.', 'success');
+      closeModal('returnModal');
+      loadReturns();
+      // Refresh products if restocked
+      if (data.returnType === 'Restock') {
+        const sess = getSession();
+        const pRes = await apiCall({ action: 'getProducts', token: sess.token });
+        if (pRes.success) {
+          STATE.products     = pRes.data || [];
+          STATE.posAllProducts = STATE.products.filter(p => p.status === 'Active');
+        }
+      }
+    } else {
+      errEl.textContent = res.message || 'Failed to save return.';
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+function deleteReturn(id) {
+  const r = STATE.returns.find(x => x.returnID === id);
+  if (!r) return;
+  $('confirmMessage').textContent = `Delete return record "${r.returnID}"? This cannot be undone.`;
+  openModal('confirmModal');
+  $('confirmDeleteBtn').onclick = async () => {
+    closeModal('confirmModal');
+    showLoading('Deleting...');
+    try {
+      const sess = getSession();
+      const res  = await apiPost({ action: 'deleteReturn', returnID: id, token: sess.token });
+      if (res.success) { showToast('Return deleted.', 'success'); loadReturns(); }
+      else showToast(res.message || 'Delete failed.', 'error');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { hideLoading(); }
+  };
+}
