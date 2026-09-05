@@ -150,6 +150,146 @@ function clearSession() {
   sessionStorage.removeItem(CONFIG.SESSION_KEY);
 }
 
+// ── Brute Force Protection ────────────────────────────────────
+const BRUTE = {
+  MAX_ATTEMPTS : 5,          // lock after this many failures
+  LOCKOUT_MS   : 15 * 60 * 1000, // 15 minutes in ms
+  KEY_ATTEMPTS : 'pais_login_attempts',
+  KEY_LOCKOUT  : 'pais_login_lockout',
+  _countdownTimer: null,
+};
+
+function bruteGetAttempts() {
+  return parseInt(localStorage.getItem(BRUTE.KEY_ATTEMPTS) || '0', 10);
+}
+
+function bruteSetAttempts(n) {
+  localStorage.setItem(BRUTE.KEY_ATTEMPTS, String(n));
+}
+
+function bruteGetLockoutUntil() {
+  return parseInt(localStorage.getItem(BRUTE.KEY_LOCKOUT) || '0', 10);
+}
+
+function bruteSetLockout() {
+  const until = Date.now() + BRUTE.LOCKOUT_MS;
+  localStorage.setItem(BRUTE.KEY_LOCKOUT, String(until));
+}
+
+function bruteClear() {
+  localStorage.removeItem(BRUTE.KEY_ATTEMPTS);
+  localStorage.removeItem(BRUTE.KEY_LOCKOUT);
+}
+
+function bruteIsLocked() {
+  const until = bruteGetLockoutUntil();
+  if (!until) return false;
+  if (Date.now() < until) return true;
+  // Lockout expired — auto-clear
+  bruteClear();
+  return false;
+}
+
+/** Returns remaining lockout seconds (0 if not locked). */
+function bruteSecondsLeft() {
+  const until = bruteGetLockoutUntil();
+  if (!until) return 0;
+  const diff = Math.ceil((until - Date.now()) / 1000);
+  return diff > 0 ? diff : 0;
+}
+
+function bruteFormatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0
+    ? `${m}m ${String(s).padStart(2, '0')}s`
+    : `${s}s`;
+}
+
+/** Lock / unlock the login form inputs and button. */
+function bruteSetFormLocked(locked, message = '') {
+  const btn      = $('loginBtn');
+  const usernameEl = $('loginUsername');
+  const passwordEl = $('loginPassword');
+  const errEl    = $('loginError');
+
+  if (locked) {
+    btn.disabled         = true;
+    usernameEl.disabled  = true;
+    passwordEl.disabled  = true;
+    btn.innerHTML        = '<i class="fas fa-lock"></i> Account Locked';
+    errEl.textContent    = message;
+    errEl.style.display  = 'block';
+    errEl.className      = 'alert alert-error alert-lockout';
+  } else {
+    btn.disabled         = false;
+    usernameEl.disabled  = false;
+    passwordEl.disabled  = false;
+    btn.innerHTML        = '<i class="fas fa-sign-in-alt"></i> Login';
+    errEl.style.display  = 'none';
+    errEl.className      = 'alert alert-error';
+  }
+}
+
+/** Start (or refresh) the countdown ticker shown in the error box. */
+function bruteStartCountdown() {
+  clearInterval(BRUTE._countdownTimer);
+
+  const tick = () => {
+    const secs = bruteSecondsLeft();
+    if (secs <= 0) {
+      clearInterval(BRUTE._countdownTimer);
+      bruteClear();
+      bruteSetFormLocked(false);
+      showToast('Lockout expired. You may try again.', 'info');
+      return;
+    }
+    const errEl = $('loginError');
+    errEl.textContent =
+      `Too many failed attempts. Account locked for ${bruteFormatTime(secs)}. Please wait.`;
+  };
+
+  tick(); // run immediately
+  BRUTE._countdownTimer = setInterval(tick, 1000);
+}
+
+/** Call this on page load to restore any active lockout. */
+function bruteCheckOnLoad() {
+  if (bruteIsLocked()) {
+    bruteSetFormLocked(true, '');
+    bruteStartCountdown();
+  }
+}
+
+/** Call on every failed login attempt. */
+function bruteRecordFailure() {
+  const attempts = bruteGetAttempts() + 1;
+  bruteSetAttempts(attempts);
+
+  const remaining = BRUTE.MAX_ATTEMPTS - attempts;
+
+  if (attempts >= BRUTE.MAX_ATTEMPTS) {
+    bruteSetLockout();
+    bruteSetAttempts(0); // reset counter so it's clean after lockout expires
+    bruteSetFormLocked(true, '');
+    bruteStartCountdown();
+    return { locked: true, message: null };
+  }
+
+  return {
+    locked: false,
+    message: remaining === 1
+      ? `Warning: 1 attempt remaining before lockout.`
+      : `Invalid credentials. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`,
+  };
+}
+
+/** Call on successful login to reset counters. */
+function bruteRecordSuccess() {
+  clearInterval(BRUTE._countdownTimer);
+  bruteClear();
+}
+
 // ── Auth ─────────────────────────────────────────────────────
 function togglePassword() {
   const input = $('loginPassword');
@@ -167,10 +307,17 @@ async function handleLogin(e) {
   e.preventDefault();
   const username = $('loginUsername').value.trim();
   const password = $('loginPassword').value;
-  const errEl = $('loginError');
-  const btn = $('loginBtn');
+  const errEl    = $('loginError');
+  const btn      = $('loginBtn');
 
   errEl.style.display = 'none';
+
+  // ── Block immediately if already locked ──────────────────
+  if (bruteIsLocked()) {
+    bruteSetFormLocked(true, '');
+    bruteStartCountdown();
+    return;
+  }
 
   if (!username || !password) {
     errEl.textContent = 'Please enter username and password.';
@@ -184,18 +331,27 @@ async function handleLogin(e) {
     const res = await apiPost({ action: 'login', username, password });
 
     if (res.success) {
+      bruteRecordSuccess();
       saveSession(res.data);
       STATE.user = res.data;
       initApp();
     } else {
-      errEl.textContent = res.message || 'Invalid username or password.';
-      errEl.style.display = 'block';
+      // Record failure and show appropriate message
+      const { locked, message } = bruteRecordFailure();
+      if (!locked) {
+        errEl.textContent   = message || res.message || 'Invalid username or password.';
+        errEl.style.display = 'block';
+      }
+      // If locked, bruteRecordFailure already updated the UI
     }
   } catch (err) {
-    errEl.textContent = err.message || 'Login failed. Please try again.';
+    errEl.textContent   = err.message || 'Login failed. Please try again.';
     errEl.style.display = 'block';
   } finally {
-    setButtonLoading(btn, false);
+    // Only restore button if NOT locked
+    if (!bruteIsLocked()) {
+      setButtonLoading(btn, false);
+    }
   }
 }
 
@@ -1360,6 +1516,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show login page
     $('loginPage').style.display = 'flex';
     $('mainApp').style.display = 'none';
+    // Restore any active brute-force lockout
+    bruteCheckOnLoad();
   }
 
   // Login form
